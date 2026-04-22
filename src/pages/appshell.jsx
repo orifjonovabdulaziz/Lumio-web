@@ -43,6 +43,9 @@ export function AppShell() {
               <div style={{ fontSize: 12, color: 'var(--mute)' }}>@{user.username}</div>
             </div>
           </div>
+          <Button size="sm" onClick={() => navigate('/rooms')}>
+            {user.role === 'teacher' ? 'К комнатам' : 'К урокам'}
+          </Button>
           <Button variant="secondary" size="sm" onClick={logout}
             leftIcon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3H4a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h2M10 11l3-3-3-3M13 8H6"/></svg>}
           >
@@ -86,24 +89,34 @@ export function AppShell() {
           gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
           marginTop: 8,
         }}>
-          {(user.role === 'teacher' ? teacherTiles : studentTiles).map((t, i) => (
-            <Card key={i} style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{
-                width: 40, height: 40, borderRadius: 10,
-                background: 'var(--primary-soft)', color: 'var(--primary-ink)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                {t.icon}
-              </div>
-              <div style={{ fontSize: 15.5, fontWeight: 560, color: 'var(--ink)' }}>{t.title}</div>
-              <div style={{ fontSize: 13.5, color: 'var(--mute)', lineHeight: 1.45, flex: 1 }}>{t.desc}</div>
-              <div style={{
-                display: 'inline-flex', alignSelf: 'flex-start', padding: '3px 8px',
-                background: 'oklch(0.96 0.004 260)', color: 'var(--mute)',
-                borderRadius: 6, fontSize: 11.5, fontWeight: 540,
-              }}>скоро</div>
-            </Card>
-          ))}
+          {(user.role === 'teacher' ? teacherTiles : studentTiles).map((t, i) => {
+            const live = i === 0;
+            return (
+              <Card key={i}
+                onClick={live ? () => navigate('/rooms') : undefined}
+                style={{
+                  padding: 20, display: 'flex', flexDirection: 'column', gap: 12,
+                  cursor: live ? 'pointer' : 'default',
+                }}
+              >
+                <div style={{
+                  width: 40, height: 40, borderRadius: 10,
+                  background: 'var(--primary-soft)', color: 'var(--primary-ink)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  {t.icon}
+                </div>
+                <div style={{ fontSize: 15.5, fontWeight: 560, color: 'var(--ink)' }}>{t.title}</div>
+                <div style={{ fontSize: 13.5, color: 'var(--mute)', lineHeight: 1.45, flex: 1 }}>{t.desc}</div>
+                <div style={{
+                  display: 'inline-flex', alignSelf: 'flex-start', padding: '3px 8px',
+                  background: live ? 'var(--primary-soft)' : 'oklch(0.96 0.004 260)',
+                  color: live ? 'var(--primary-ink)' : 'var(--mute)',
+                  borderRadius: 6, fontSize: 11.5, fontWeight: 540,
+                }}>{live ? 'открыть' : 'скоро'}</div>
+              </Card>
+            );
+          })}
         </div>
 
         <details style={{

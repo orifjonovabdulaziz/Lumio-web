@@ -28,7 +28,7 @@ export function SignInPage() {
     setSubmitting(true); setServerError(null);
     try {
       await login({ username: form.username.trim(), password: form.password });
-      navigate('/app');
+      navigate('/rooms');
     } catch (err2) {
       const status = err2.response?.status;
       if (status === 401) setServerError('Неверный логин или пароль.');

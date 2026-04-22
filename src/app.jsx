@@ -8,9 +8,67 @@ import { SignInPage } from './pages/signin.jsx';
 import { SignUpPage } from './pages/signup.jsx';
 import { ForgotPage } from './pages/forgot.jsx';
 import { AppShell } from './pages/appshell.jsx';
+import { RoomsListPage } from './pages/rooms/list.jsx';
+import { RoomNewPage } from './pages/rooms/new.jsx';
+import { RoomEditPage } from './pages/rooms/edit.jsx';
+import { RoomDetailPage } from './pages/rooms/detail.jsx';
+import { RoomLivePage } from './pages/rooms/live.jsx';
 import { EditModeBridge, applyTweakVars } from './tweaks.jsx';
 
-const PROTECTED = new Set(['/app']);
+function isProtected(path) {
+  return path === '/app' || path === '/rooms' || path.startsWith('/rooms/');
+}
+
+function matchRoute(path) {
+  if (path === '/' || path === '') return { kind: 'landing' };
+  if (path === '/sign-in') return { kind: 'sign-in' };
+  if (path === '/sign-up') return { kind: 'sign-up' };
+  if (path === '/forgot') return { kind: 'forgot' };
+  if (path === '/app') return { kind: 'app' };
+  if (path === '/rooms') return { kind: 'rooms-list' };
+  if (path === '/rooms/new') return { kind: 'rooms-new' };
+
+  const m = path.match(/^\/rooms\/([^/]+)(\/edit|\/live)?$/);
+  if (m) {
+    const name = decodeURIComponent(m[1]);
+    if (m[2] === '/edit') return { kind: 'rooms-edit', name };
+    if (m[2] === '/live') return { kind: 'rooms-live', name };
+    return { kind: 'rooms-detail', name };
+  }
+  return { kind: 'not-found' };
+}
+
+function renderRoute(route, user) {
+  switch (route.kind) {
+    case 'landing':      return <LandingPage />;
+    case 'sign-in':      return <SignInPage />;
+    case 'sign-up':      return <SignUpPage />;
+    case 'forgot':       return <ForgotPage />;
+    case 'app':          return user ? <AppShell /> : null;
+    case 'rooms-list':   return user ? <RoomsListPage /> : null;
+    case 'rooms-new':    return user ? <RoomNewPage /> : null;
+    case 'rooms-edit':   return user ? <RoomEditPage name={route.name} /> : null;
+    case 'rooms-detail': return user ? <RoomDetailPage name={route.name} /> : null;
+    case 'rooms-live':   return user ? <RoomLivePage name={route.name} /> : null;
+    default:             return <NotFound />;
+  }
+}
+
+function pageLabel(route) {
+  switch (route.kind) {
+    case 'landing':      return '01 Landing';
+    case 'sign-in':      return '02 Sign In';
+    case 'sign-up':      return '03 Sign Up';
+    case 'forgot':       return '04 Forgot';
+    case 'app':          return '05 App';
+    case 'rooms-list':   return '06 Rooms';
+    case 'rooms-new':    return '07 New Room';
+    case 'rooms-detail': return '08 Room Detail';
+    case 'rooms-edit':   return '09 Edit Room';
+    case 'rooms-live':   return '10 Live';
+    default:             return 'NotFound';
+  }
+}
 
 function LumioApp() {
   const { path, navigate } = useRouter();
@@ -21,23 +79,18 @@ function LumioApp() {
   // Route guard — protected routes require a user
   React.useEffect(() => {
     if (bootstrapping) return;
-    if (PROTECTED.has(path) && !user) {
+    if (isProtected(path) && !user) {
       navigate('/sign-in', { replace: true });
     }
   }, [path, user, bootstrapping, navigate]);
 
   if (bootstrapping) return <BootSplash />;
 
-  let page;
-  if (path === '/' || path === '') page = <LandingPage />;
-  else if (path === '/sign-in') page = <SignInPage />;
-  else if (path === '/sign-up') page = <SignUpPage />;
-  else if (path === '/forgot') page = <ForgotPage />;
-  else if (path === '/app') page = user ? <AppShell /> : null;
-  else page = <NotFound />;
+  const route = matchRoute(path);
+  const page = renderRoute(route, user);
 
   return (
-    <div data-screen-label={pageLabel(path)} style={{ minHeight: '100vh', background: 'var(--paper)' }}>
+    <div data-screen-label={pageLabel(route)} style={{ minHeight: '100vh', background: 'var(--paper)' }}>
       <PageTransition pathKey={path}>
         {page}
       </PageTransition>
@@ -56,15 +109,6 @@ function BootSplash() {
       <span style={{ fontSize: 14 }}>Загружаем…</span>
     </div>
   );
-}
-
-function pageLabel(path) {
-  if (path === '/' || path === '') return '01 Landing';
-  if (path === '/sign-in') return '02 Sign In';
-  if (path === '/sign-up') return '03 Sign Up';
-  if (path === '/forgot') return '04 Forgot';
-  if (path === '/app') return '05 App';
-  return 'NotFound';
 }
 
 function PageTransition({ pathKey, children }) {

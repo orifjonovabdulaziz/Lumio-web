@@ -60,7 +60,7 @@ function TweaksPanel({ open, onClose }) {
       try { await login({ username: base.username, password: base.password }); }
       catch { return; }
     }
-    window.location.hash = '/app';
+    window.location.hash = '/rooms';
   }
 
   function resetAll() {

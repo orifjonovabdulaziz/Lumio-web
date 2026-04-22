@@ -176,7 +176,7 @@ export function SignUpPage() {
         first_name: form.first_name.trim(), last_name: form.last_name.trim(),
         role: form.role,
       });
-      navigate('/app');
+      navigate('/rooms');
     } catch (err) {
       const status = err.response?.status;
       const data = err.response?.data;
