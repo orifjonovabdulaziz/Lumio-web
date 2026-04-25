@@ -26,9 +26,10 @@ export async function listRoomMessages(roomName, { signal, page } = {}) {
   return unwrapList(data);
 }
 
-// Reuses the existing student-search endpoint for new-DM peer pick.
-export async function searchStudents(query, { signal } = {}) {
-  const { data } = await api.get('/users/students/', { params: { q: query }, signal });
+// User search for starting a new DM. Backend already excludes the current
+// user. Used inline in the chat-list search input.
+export async function searchUsers(query, { signal } = {}) {
+  const { data } = await api.get('/users/search/', { params: { q: query }, signal });
   return unwrapList(data);
 }
 
@@ -116,6 +117,12 @@ export function openChatSocket({ kind, key }) {
 
       if (e.code === 4403) {
         setState('forbidden');
+        return;
+      }
+
+      if (e.code === 4404) {
+        // Username doesn't exist or it's the current user — no point retrying.
+        setState('not_found');
         return;
       }
 

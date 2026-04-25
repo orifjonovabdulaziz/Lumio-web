@@ -62,8 +62,8 @@ export function ChatTrigger({ unread: unreadProp }) {
             chats={chats}
             activeId={null}
             onSelect={(id) => openFull(id)}
+            onPickUser={(u) => openFull(`dm:${u.username}`)}
             variant="popover"
-            onNewChat={null}
             query={query}
             onQueryChange={setQuery}
             filter="all"

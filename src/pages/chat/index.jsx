@@ -7,7 +7,6 @@ import { LumioLogo, Toast, Button } from '../../ui.jsx';
 import { ChatIco } from './icons.jsx';
 import { ChatList } from './list.jsx';
 import { ChatWindow } from './window.jsx';
-import { NewChatSearch } from './new_chat.jsx';
 import { useChats, useChatThread } from './hooks.js';
 import { MOCK_TEMPLATES, consumePendingActive } from './mock.js';
 
@@ -108,7 +107,6 @@ function ChatPageInner() {
   const [mobileView, setMobileView] = React.useState('list');
   const [templates, setTemplates] = React.useState(MOCK_TEMPLATES);
   const [toast, setToast] = React.useState(null);
-  const [newChatOpen, setNewChatOpen] = React.useState(false);
 
   React.useEffect(() => {
     if (activeId || chats.length === 0 || isMobile) return;
@@ -181,32 +179,42 @@ function ChatPageInner() {
     if (isMobile) setMobileView('window');
   }
 
-  function startNewDm(student) {
-    const fn = student.first_name || '';
-    const ln = student.last_name || '';
-    const name = `${fn} ${ln}`.trim() || student.username;
-    const placeholder = {
-      id: `dm:${student.username}`,
+  function startNewDm(peer) {
+    const id = `dm:${peer.username}`;
+    // If we already have this conversation, just select it.
+    if (chats.some((c) => c.id === id)) {
+      selectChat(id);
+      setQuery('');
+      return;
+    }
+    const fn = peer.first_name || '';
+    const ln = peer.last_name || '';
+    const name = `${fn} ${ln}`.trim() || peer.username || '?';
+    upsertChat({
+      id,
       kind: 'direct',
       backendKind: 'dm',
-      backendKey: student.username,
-      peer: student,
+      backendKey: peer.username,
+      peer,
       name,
       unread: 0,
       preview: '',
       previewTime: Date.now(),
       previewSelf: false,
-    };
-    upsertChat(placeholder);
-    selectChat(placeholder.id);
-    setNewChatOpen(false);
+    });
+    selectChat(id);
+    setQuery('');
   }
 
   function logout() { doLogout(); navigate('/', { replace: true }); }
 
   return (
     <div className="ll-theme" style={{
-      minHeight: '100vh', display: 'flex', flexDirection: 'column',
+      // height (not minHeight) + overflow:hidden so only the two designated
+      // scroll areas — chat list (left) and messages thread (right) — scroll.
+      // Header, banners, and the input row stay fixed.
+      height: '100vh', overflow: 'hidden',
+      display: 'flex', flexDirection: 'column',
       background: 'linear-gradient(135deg, #faf5ff 0%, #eff6ff 50%, #fdf2f8 100%)',
       fontFamily: 'inherit',
     }}>
@@ -232,6 +240,12 @@ function ChatPageInner() {
           Нет доступа к этому чату.
         </Banner>
       )}
+      {wsState === 'not_found' && (
+        <Banner color="danger">
+          <ChatIco.alertCircle width={14} height={14} />
+          Пользователь не найден или это вы.
+        </Banner>
+      )}
 
       <div style={{
         flex: 1, minHeight: 0,
@@ -250,20 +264,14 @@ function ChatPageInner() {
             chats={chats}
             activeId={activeId}
             onSelect={selectChat}
+            onPickUser={startNewDm}
             variant="full"
-            onNewChat={() => setNewChatOpen(true)}
             query={query}
             onQueryChange={setQuery}
             filter={filter}
             onFilterChange={setFilter}
             loading={chatsLoading}
           />
-          {newChatOpen && (
-            <NewChatSearch
-              onPick={startNewDm}
-              onClose={() => setNewChatOpen(false)}
-            />
-          )}
         </div>
 
         <div style={{

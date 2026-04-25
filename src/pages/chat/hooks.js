@@ -6,8 +6,42 @@ import React from 'react';
 import { listRooms } from '../../lib/rooms.js';
 import {
   listDmConversations, listDmMessages, listRoomMessages,
-  openChatSocket, normalizeMessage, normalizeConversation, normalizeRoom,
+  openChatSocket, searchUsers,
+  normalizeMessage, normalizeConversation, normalizeRoom,
 } from '../../lib/chat.js';
+
+// ─── Debounced user search (for inline new-DM lookup in chat list) ────────
+// Debounce 300ms per spec. Aborts in-flight on query change / unmount.
+export function useUserSearch(query, { minLength = 2 } = {}) {
+  const [results, setResults] = React.useState([]);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState(null);
+
+  React.useEffect(() => {
+    const q = (query || '').trim();
+    if (q.length < minLength) {
+      setResults([]); setLoading(false); setError(null);
+      return;
+    }
+    const ctrl = new AbortController();
+    const t = setTimeout(async () => {
+      setLoading(true); setError(null);
+      try {
+        const rows = await searchUsers(q, { signal: ctrl.signal });
+        setResults(rows);
+      } catch (e) {
+        if (ctrl.signal.aborted) return;
+        setError(e);
+        setResults([]);
+      } finally {
+        setLoading(false);
+      }
+    }, 300);
+    return () => { ctrl.abort(); clearTimeout(t); };
+  }, [query, minLength]);
+
+  return { results, loading, error };
+}
 
 // ─── Conversations + rooms list ────────────────────────────────────────────
 export function useChats({ enabled }) {
