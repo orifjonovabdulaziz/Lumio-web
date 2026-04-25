@@ -189,7 +189,8 @@
     .ll-tst-row > .ll-tst-side { display: none !important; }
   }
 
-  /* Auth — scoped purple/blue theme override (matches landing) */
+  /* Scoped purple/blue theme override (matches landing) — used by auth + dashboard */
+  .ll-theme,
   .ll-auth-theme {
     --primary: #9333ea;
     --primary-ink: #7e22ce;
@@ -200,7 +201,9 @@
     --primary-ring: rgba(147, 51, 234, 0.30);
     --primary-hue: 296;
   }
+  .ll-theme a,
   .ll-auth-theme a { color: #7e22ce; }
+  .ll-theme a:hover,
   .ll-auth-theme a:hover { color: #6b21a8; }
 </style>
 </head>

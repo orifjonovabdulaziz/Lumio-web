@@ -14,10 +14,11 @@ import { RoomNewPage } from './pages/rooms/new.jsx';
 import { RoomEditPage } from './pages/rooms/edit.jsx';
 import { RoomDetailPage } from './pages/rooms/detail.jsx';
 import { RoomLivePage } from './pages/rooms/live.jsx';
+import { ChatPage } from './pages/chat/index.jsx';
 import { EditModeBridge, applyTweakVars } from './tweaks.jsx';
 
 function isProtected(path) {
-  return path === '/app' || path === '/rooms' || path.startsWith('/rooms/');
+  return path === '/app' || path === '/chat' || path === '/rooms' || path.startsWith('/rooms/');
 }
 
 function matchRoute(path) {
@@ -26,6 +27,7 @@ function matchRoute(path) {
   if (path === '/sign-up') return { kind: 'sign-up' };
   if (path === '/forgot') return { kind: 'forgot' };
   if (path === '/app') return { kind: 'app' };
+  if (path === '/chat') return { kind: 'chat' };
   if (path === '/rooms') return { kind: 'rooms-list' };
   if (path === '/rooms/new') return { kind: 'rooms-new' };
 
@@ -48,6 +50,7 @@ function renderRoute(route, user) {
     case 'app':
       if (!user) return null;
       return user.role === 'teacher' ? <TeacherDashboard /> : <AppShell />;
+    case 'chat':         return user ? <ChatPage /> : null;
     case 'rooms-list':   return user ? <RoomsListPage /> : null;
     case 'rooms-new':    return user ? <RoomNewPage /> : null;
     case 'rooms-edit':   return user ? <RoomEditPage name={route.name} /> : null;
@@ -64,6 +67,7 @@ function pageLabel(route) {
     case 'sign-up':      return '03 Sign Up';
     case 'forgot':       return '04 Forgot';
     case 'app':          return '05 App';
+    case 'chat':         return '05a Chat';
     case 'rooms-list':   return '06 Rooms';
     case 'rooms-new':    return '07 New Room';
     case 'rooms-detail': return '08 Room Detail';

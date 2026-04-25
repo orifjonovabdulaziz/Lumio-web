@@ -42,7 +42,7 @@ export function setAuthFailureHandler(fn) {
   onAuthFailure = fn;
 }
 
-async function refreshAccess() {
+export async function refreshAccess() {
   const refresh = tokenStorage.getRefresh();
   if (!refresh) throw new Error('No refresh token');
 

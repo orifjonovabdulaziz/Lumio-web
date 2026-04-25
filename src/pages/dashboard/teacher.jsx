@@ -3,6 +3,7 @@ import React from 'react';
 import { LumioLogo, Button } from '../../ui.jsx';
 import { useRouter } from '../../router.jsx';
 import { useAuth, logout as doLogout } from '../../lib/auth.js';
+import { ChatTrigger } from '../chat/popover.jsx';
 
 // ─── Icon set (lucide-style, inline SVG) ───────────────────────────────────
 const iconProps = {
@@ -106,9 +107,9 @@ export function TeacherDashboard() {
   const sidebarWidth = collapsed ? 72 : 248;
 
   return (
-    <div style={{
+    <div className="ll-theme" style={{
       minHeight: '100vh', display: 'flex',
-      background: 'oklch(0.985 0.003 260)',
+      background: 'linear-gradient(135deg, #faf5ff 0%, #eff6ff 50%, #fdf2f8 100%)',
       fontFamily: 'inherit',
     }}>
       <Sidebar
@@ -274,7 +275,7 @@ function TopBar({ user, unread, menuOpen, setMenuOpen, menuRef, onLogout }) {
       background: 'white', borderBottom: '1px solid var(--line)',
       position: 'sticky', top: 0, zIndex: 15,
     }}>
-      <IconActionButton label="Чат" count={unread.chats}><Icon.chat /></IconActionButton>
+      <ChatTrigger unread={unread.chats} />
       <IconActionButton label="Уведомления" count={unread.notifications}><Icon.bell /></IconActionButton>
 
       <div ref={menuRef} style={{ position: 'relative' }}>
@@ -587,7 +588,7 @@ function NextLessonWidget({ onEnter }) {
           <div style={{ fontSize: 14, fontWeight: 560, color: 'var(--primary-ink)' }}>
             {startsLabel}
           </div>
-          <Button onClick={onEnter} size="lg"
+          <Button onClick={onEnter} size="lg" variant="gradient"
             leftIcon={<Icon.video width={16} height={16} />}>
             Войти в урок
           </Button>
