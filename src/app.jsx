@@ -8,6 +8,7 @@ import { SignInPage } from './pages/signin.jsx';
 import { SignUpPage } from './pages/signup.jsx';
 import { ForgotPage } from './pages/forgot.jsx';
 import { AppShell } from './pages/appshell.jsx';
+import { TeacherDashboard } from './pages/dashboard/teacher.jsx';
 import { RoomsListPage } from './pages/rooms/list.jsx';
 import { RoomNewPage } from './pages/rooms/new.jsx';
 import { RoomEditPage } from './pages/rooms/edit.jsx';
@@ -44,7 +45,9 @@ function renderRoute(route, user) {
     case 'sign-in':      return <SignInPage />;
     case 'sign-up':      return <SignUpPage />;
     case 'forgot':       return <ForgotPage />;
-    case 'app':          return user ? <AppShell /> : null;
+    case 'app':
+      if (!user) return null;
+      return user.role === 'teacher' ? <TeacherDashboard /> : <AppShell />;
     case 'rooms-list':   return user ? <RoomsListPage /> : null;
     case 'rooms-new':    return user ? <RoomNewPage /> : null;
     case 'rooms-edit':   return user ? <RoomEditPage name={route.name} /> : null;

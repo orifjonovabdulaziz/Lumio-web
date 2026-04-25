@@ -47,10 +47,18 @@ function RoleCard({ role, selected, onSelect }) {
     title: 'Преподаватель',
     desc: 'Веду уроки и создаю комнаты.',
     icon: <TeacherIcon />,
+    accent:  '#2563eb',  // blue-600
+    accentBg:'#dbeafe',  // blue-100
+    bgSel:   '#eff6ff',  // blue-50
+    iconInk: '#2563eb',
   } : {
     title: 'Ученик',
     desc: 'Присоединяюсь к урокам.',
     icon: <StudentIcon />,
+    accent:  '#9333ea',  // purple-600
+    accentBg:'#f3e8ff',  // purple-100
+    bgSel:   '#faf5ff',  // purple-50
+    iconInk: '#9333ea',
   };
   const [hover, setHover] = React.useState(false);
   return (
@@ -63,13 +71,13 @@ function RoleCard({ role, selected, onSelect }) {
       onMouseLeave={() => setHover(false)}
       style={{
         textAlign: 'left', width: '100%', minWidth: 0, cursor: 'pointer',
-        background: selected ? 'var(--primary-soft)' : 'var(--surface)',
-        border: `1px solid ${selected ? 'var(--primary-edge)' : (hover ? 'var(--line-strong)' : 'var(--line)')}`,
+        background: selected ? data.bgSel : '#fff',
+        border: `2px solid ${selected ? data.accent : (hover ? '#9ca3af' : '#e5e7eb')}`,
         borderRadius: 14, padding: 16,
         display: 'flex', flexDirection: 'column', gap: 10,
         transition: `all ${LumioTokens.motion.base}`,
         boxShadow: 'none',
-        fontFamily: 'inherit', color: 'var(--ink)',
+        fontFamily: 'inherit', color: '#111827',
         position: 'relative', overflow: 'hidden',
         wordBreak: 'normal', overflowWrap: 'normal',
       }}
@@ -77,8 +85,8 @@ function RoleCard({ role, selected, onSelect }) {
       <div style={{
         position: 'absolute', top: 12, right: 12,
         width: 18, height: 18, borderRadius: '50%',
-        border: `1.5px solid ${selected ? 'var(--primary)' : 'var(--line-strong)'}`,
-        background: selected ? 'var(--primary)' : 'transparent',
+        border: `1.5px solid ${selected ? data.accent : '#d1d5db'}`,
+        background: selected ? data.accent : 'transparent',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         transition: `all ${LumioTokens.motion.base}`,
       }}>
@@ -91,8 +99,8 @@ function RoleCard({ role, selected, onSelect }) {
 
       <div style={{
         width: 40, height: 40, borderRadius: 10, flexShrink: 0,
-        background: selected ? 'oklch(1 0 0 / 0.7)' : 'oklch(0.96 0.005 260)',
-        color: selected ? 'var(--primary-ink)' : 'var(--ink-soft)',
+        background: selected ? data.accent : data.accentBg,
+        color: selected ? '#fff' : data.iconInk,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         transition: `all ${LumioTokens.motion.base}`,
       }}>
@@ -106,7 +114,7 @@ function RoleCard({ role, selected, onSelect }) {
           paddingRight: 22,
         }}>{data.title}</div>
         <div style={{
-          fontSize: 12.5, color: 'var(--mute)', lineHeight: 1.4,
+          fontSize: 12.5, color: '#6b7280', lineHeight: 1.4,
           textWrap: 'pretty',
         }}>{data.desc}</div>
       </div>
@@ -176,7 +184,7 @@ export function SignUpPage() {
         first_name: form.first_name.trim(), last_name: form.last_name.trim(),
         role: form.role,
       });
-      navigate('/rooms');
+      navigate('/app');
     } catch (err) {
       const status = err.response?.status;
       const data = err.response?.data;
@@ -217,7 +225,7 @@ export function SignUpPage() {
               Я буду использовать Lumio как <span style={{ color: 'var(--danger)' }}>*</span>
             </span>
           </div>
-          <div role="radiogroup" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }} className="lumio-role-grid">
+          <div role="radiogroup" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }} className="lumio-role-grid">
             <RoleCard role="teacher" selected={form.role === 'teacher'} onSelect={(r) => { upd('role', r); setTouched(t => ({ ...t, role: true })); setErrors(e => ({ ...e, role: undefined })); }} />
             <RoleCard role="student" selected={form.role === 'student'} onSelect={(r) => { upd('role', r); setTouched(t => ({ ...t, role: true })); setErrors(e => ({ ...e, role: undefined })); }} />
           </div>
@@ -237,7 +245,7 @@ export function SignUpPage() {
 
         <Divider />
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }} className="lumio-name-grid">
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12 }} className="lumio-name-grid">
           <FormField label="Имя" error={errors.first_name} required>
             <Input
               value={form.first_name}
@@ -301,7 +309,7 @@ export function SignUpPage() {
           }}>{serverError}</div>
         )}
 
-        <Button type="submit" size="lg" fullWidth loading={submitting}>
+        <Button type="submit" size="lg" variant="gradient" fullWidth loading={submitting}>
           {submitting ? 'Создаём аккаунт…' : 'Создать аккаунт'}
         </Button>
 

@@ -62,6 +62,11 @@ export function Button({
     danger: {
       background: 'var(--surface)', color: 'var(--danger)', borderColor: 'var(--line-strong)',
     },
+    gradient: {
+      background: 'linear-gradient(to right, #9333ea, #2563eb)',
+      color: 'white',
+      boxShadow: '0 1px 2px rgba(16,24,40,0.08)',
+    },
   };
   const [hover, setHover] = React.useState(false);
   const [active, setActive] = React.useState(false);
@@ -71,6 +76,10 @@ export function Button({
     ghost: { background: 'oklch(0.96 0.004 260)' },
     soft: { background: 'oklch(0.94 0.04 var(--primary-hue, 175))' },
     danger: { background: 'oklch(0.98 0.02 25)' },
+    gradient: {
+      background: 'linear-gradient(to right, #7c3aed, #1d4ed8)',
+      boxShadow: '0 4px 12px rgba(99, 102, 241, 0.25)',
+    },
   };
   const style = {
     ...base, ...sizes[size], ...variants[variant],

@@ -28,7 +28,7 @@ export function SignInPage() {
     setSubmitting(true); setServerError(null);
     try {
       await login({ username: form.username.trim(), password: form.password });
-      navigate('/rooms');
+      navigate('/app');
     } catch (err2) {
       const status = err2.response?.status;
       if (status === 401) setServerError('Неверный логин или пароль.');
@@ -66,7 +66,7 @@ export function SignInPage() {
             }}>
               Пароль<span style={{ color: 'var(--danger)', marginLeft: 2 }}>*</span>
             </label>
-            <Link to="/forgot" style={{ fontSize: 13, fontWeight: 540 }}>Забыли?</Link>
+            <Link to="/forgot" tabIndex={-1} style={{ fontSize: 13, fontWeight: 540 }}>Забыли?</Link>
           </div>
           <FormField error={errors.password}>
             <PasswordInput
@@ -93,7 +93,7 @@ export function SignInPage() {
           </div>
         )}
 
-        <Button type="submit" size="lg" fullWidth loading={submitting}>
+        <Button type="submit" size="lg" variant="gradient" fullWidth loading={submitting}>
           {submitting ? 'Входим…' : 'Войти'}
         </Button>
       </form>
