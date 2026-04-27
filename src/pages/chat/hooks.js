@@ -8,7 +8,8 @@ import React from 'react';
 import { listRooms } from '../../lib/rooms.js';
 import {
   listDmConversations, listLatestMessages, listMessagesAfter, listRoomsUnread,
-  searchUsers, normalizeMessage, normalizeConversation, normalizeRoom,
+  fetchLastMessage, searchUsers,
+  normalizeMessage, normalizeConversation, normalizeRoom,
 } from '../../lib/chat.js';
 import { chatHub } from '../../lib/chatHub.js';
 
@@ -112,21 +113,55 @@ export function useChats({ enabled, meId }) {
     refresh();
   }, [enabled, refresh]);
 
-  // ── Eager room subscription ──────────────────────────────────────────────
-  // Without this, room.message events only flow for the room the user is
-  // actively viewing (useChatThread subscribes on open). The inbox would never
-  // see preview/unread updates for the other rooms. Per backend spec we
-  // subscribe to every known room as soon as it's in the list — chatHub.rooms
-  // is a Set, so repeated calls are cheap, and chatHub auto-resubscribes the
-  // whole set on reconnect.
+  // ── Eager room subscription + preview prefetch ───────────────────────────
+  // Two reasons we need this for every known room:
+  //   1. room.message events only flow for subscribed rooms — without an
+  //      eager subscribe the inbox preview/unread of rooms the user hasn't
+  //      opened never refreshes.
+  //   2. Backend's /rooms/ listing doesn't include last_message, so on
+  //      initial render rooms have empty previews. We fetch the latest
+  //      message per room in the background and patch it in.
+  // chatHub.subscribeRoom is idempotent (chatHub.rooms is a Set) and chatHub
+  // auto-resubscribes the whole set on reconnect, so calling it on every
+  // chats change is cheap. Preview prefetch is gated by a ref so we don't
+  // refire for the same room.
+  const previewFetched = React.useRef(new Set());
   React.useEffect(() => {
-    if (!enabled) return;
+    if (!enabled) {
+      previewFetched.current.clear();
+      return;
+    }
+    const ctrl = new AbortController();
     for (const c of chats) {
       if (c.backendKind !== 'room' || !c.backendKey) continue;
-      if (chatHub.rooms.has(c.backendKey)) continue;
-      chatHub.subscribeRoom(c.backendKey).catch(() => {});
+      if (!chatHub.rooms.has(c.backendKey)) {
+        chatHub.subscribeRoom(c.backendKey).catch(() => {});
+      }
+      if (c.previewTime > 0) continue;                         // backend or WS already filled it
+      if (previewFetched.current.has(c.backendKey)) continue;  // attempted this session
+      previewFetched.current.add(c.backendKey);
+      fetchLastMessage({ kind: 'room', key: c.backendKey, signal: ctrl.signal })
+        .then((msg) => {
+          if (!msg || ctrl.signal.aborted) return;
+          const time = new Date(msg.created_at || Date.now()).getTime();
+          const isMine = meId != null && msg.sender?.id === meId;
+          setChats((prev) => prev
+            .map((x) => {
+              if (x.id !== `room:${c.backendKey}`) return x;
+              if (x.previewTime >= time) return x;             // a fresher WS push won the race
+              return {
+                ...x,
+                preview: msg.content || '',
+                previewTime: time,
+                previewSelf: isMine,
+              };
+            })
+            .sort((a, b) => b.previewTime - a.previewTime));
+        })
+        .catch(() => {});
     }
-  }, [chats, enabled]);
+    return () => ctrl.abort();
+  }, [chats, enabled, meId]);
 
   // ── Live DM updates ──────────────────────────────────────────────────────
   // dm.message: bump preview, increment unread (unless mine).

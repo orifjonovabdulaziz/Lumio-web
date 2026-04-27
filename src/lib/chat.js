@@ -63,6 +63,21 @@ export async function listLatestMessages({ kind, key, signal }) {
   return [...prev.results, ...last.results];
 }
 
+// Single most-recent message — for inbox previews when the parent listing
+// endpoint doesn't include last_message metadata (currently the case for
+// /rooms/, while /dm/conversations/ already has last_message inline).
+// 1 GET for chats up to page_size; 2 GETs for longer ones.
+export async function fetchLastMessage({ kind, key, signal }) {
+  const url = messagesUrl(kind, key);
+  const first = await fetchPage(url, {}, signal);
+  if (!first.next) return first.results[first.results.length - 1] || null;
+  const pageSize = first.results.length || 20;
+  const lastPage = Math.max(2, Math.ceil(first.count / pageSize));
+  const last = await fetchPage(url, { page: lastPage }, signal);
+  if (last.results.length) return last.results[last.results.length - 1];
+  return first.results[first.results.length - 1] || null;
+}
+
 // Reconnect catchup — pull every message with id > afterId, walking pagination
 // until exhausted. Capped to keep a pathological gap from hammering the API.
 export async function listMessagesAfter({ kind, key, afterId, signal }) {
