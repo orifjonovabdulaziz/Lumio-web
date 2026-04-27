@@ -1,7 +1,9 @@
-// Chat REST + WebSocket client.
-// Auth: existing Django access JWT (Bearer for REST, ?token=<access> for WS).
-import { api, API_BASE_URL, refreshAccess } from './api.js';
-import { tokenStorage } from './storage.js';
+// Chat REST helpers + payload normalizers.
+//
+// Live data (sending, receiving, read-receipts, room subscriptions) goes
+// through chatHub — the single multiplexed WebSocket. REST is used only for
+// loading history once on chat open and for the inbox bootstrap.
+import { api } from './api.js';
 
 // ─── REST ──────────────────────────────────────────────────────────────────
 
@@ -10,23 +12,101 @@ export async function listDmConversations({ signal } = {}) {
   return unwrapList(data);
 }
 
-export async function listDmMessages(username, { signal, page } = {}) {
+// History endpoint quirks (per backend spec):
+//  * PageNumberPagination, page_size=20, ordered ASC by created_at — so
+//    ?page=1 returns the OLDEST 20 messages, ?page=N (last page) returns the
+//    newest. To show the latest history on chat open we need the LAST page.
+//  * `?after_id=N` filters to messages with id > N. Still paginated, so a
+//    long reconnect gap can spill across pages — we walk `next` until empty.
+
+function messagesUrl(kind, key) {
+  return kind === 'dm'
+    ? `/dm/${encodeURIComponent(key)}/messages/`
+    : `/rooms/${encodeURIComponent(key)}/messages/`;
+}
+
+async function fetchPage(url, params, signal) {
+  const { data } = await api.get(url, {
+    params: params && Object.keys(params).length ? params : undefined,
+    signal,
+  });
+  if (Array.isArray(data)) {
+    return { results: data, count: data.length, next: null };
+  }
+  return {
+    results: Array.isArray(data?.results) ? data.results : [],
+    count: typeof data?.count === 'number' ? data.count : 0,
+    next: data?.next || null,
+  };
+}
+
+// Initial history load — returns ~page_size most recent messages.
+// Costs at most 3 GETs:
+//   1. page=1 to learn count (and serve single-page chats outright)
+//   2. last page (= ceil(count/pageSize))
+//   3. previous page if the last page is partial (so we always show a full
+//      window's worth of recent history, not e.g. a single message when
+//      count = N*pageSize+1)
+export async function listLatestMessages({ kind, key, signal }) {
+  const url = messagesUrl(kind, key);
+  const first = await fetchPage(url, {}, signal);
+  if (!first.next) return first.results;
+  const pageSize = first.results.length || 20;
+  const lastPage = Math.max(2, Math.ceil(first.count / pageSize));
+  if (lastPage === 2) {
+    const last = await fetchPage(url, { page: 2 }, signal);
+    return [...first.results, ...last.results];
+  }
+  const last = await fetchPage(url, { page: lastPage }, signal);
+  if (last.results.length >= pageSize) return last.results;
+  const prev = await fetchPage(url, { page: lastPage - 1 }, signal);
+  return [...prev.results, ...last.results];
+}
+
+// Reconnect catchup — pull every message with id > afterId, walking pagination
+// until exhausted. Capped to keep a pathological gap from hammering the API.
+export async function listMessagesAfter({ kind, key, afterId, signal }) {
+  if (!afterId) return [];
+  const url = messagesUrl(kind, key);
+  const out = [];
+  let page = 1;
+  while (page <= 50) {
+    const params = { after_id: afterId };
+    if (page > 1) params.page = page;
+    const res = await fetchPage(url, params, signal);
+    out.push(...res.results);
+    if (!res.next) break;
+    page++;
+  }
+  return out;
+}
+
+// Per-room unread counts for inbox badges. Returns rows mapping room name
+// to unread count — backend shape may be array or object, normalised below.
+export async function listRoomsUnread({ signal } = {}) {
+  const { data } = await api.get('/rooms/unread/', { signal });
+  if (Array.isArray(data)) {
+    const map = {};
+    for (const row of data) {
+      const name = row.room ?? row.name;
+      if (name) map[name] = row.unread_count ?? row.unread ?? 0;
+    }
+    return map;
+  }
+  if (data && typeof data === 'object') return data;
+  return {};
+}
+
+// Who has read a specific room message (for hover/expanded UI).
+export async function listMessageReaders(roomName, messageId, { signal } = {}) {
   const { data } = await api.get(
-    `/dm/${encodeURIComponent(username)}/messages/`,
-    { params: page ? { page } : undefined, signal },
+    `/rooms/${encodeURIComponent(roomName)}/messages/${messageId}/reads/`,
+    { signal },
   );
   return unwrapList(data);
 }
 
-export async function listRoomMessages(roomName, { signal, page } = {}) {
-  const { data } = await api.get(
-    `/rooms/${encodeURIComponent(roomName)}/messages/`,
-    { params: page ? { page } : undefined, signal },
-  );
-  return unwrapList(data);
-}
-
-// User search for starting a new DM. Backend already excludes the current
+// User search for starting a new DM — backend already excludes the current
 // user. Used inline in the chat-list search input.
 export async function searchUsers(query, { signal } = {}) {
   const { data } = await api.get('/users/search/', { params: { q: query }, signal });
@@ -39,149 +119,11 @@ function unwrapList(data) {
   return [];
 }
 
-// ─── WS ────────────────────────────────────────────────────────────────────
-
-function wsBase() {
-  const httpBase = API_BASE_URL.replace(/\/api\/v1\/?$/, '');
-  return httpBase.replace(/^http/i, 'ws');
-}
-
-function chatSocketUrl({ kind, key }) {
-  const token = tokenStorage.getAccess();
-  const segment = kind === 'dm'
-    ? `dm/${encodeURIComponent(key)}`
-    : `room/${encodeURIComponent(key)}`;
-  return `${wsBase()}/ws/chat/${segment}/?token=${encodeURIComponent(token || '')}`;
-}
-
-// Returns a controller: { send, close, state, onMessage, onState, onError, onUnauthorized }.
-// - On close 4401: tries refreshAccess() once, reconnects with new token. If
-//   refresh fails (or 4401 again), state goes to 'unauthorized' and the
-//   onUnauthorized handler fires — caller should clear auth and redirect.
-// - On close 4403: state goes to 'forbidden' permanently (no retry).
-// - Other closes: exponential backoff 1s/2s/4s/8s/16s/30s max.
-export function openChatSocket({ kind, key }) {
-  const listeners = {
-    message: new Set(),
-    state: new Set(),
-    error: new Set(),
-    unauthorized: new Set(),
-  };
-  let ws = null;
-  let closedByUser = false;
-  let attempts = 0;
-  let refreshTried = false;
-  let reconnectTimer = null;
-  let state = 'connecting';
-
-  function setState(next) {
-    if (state === next) return;
-    state = next;
-    listeners.state.forEach((cb) => { try { cb(next); } catch {} });
-  }
-
-  function connect() {
-    setState(attempts > 0 ? 'reconnecting' : 'connecting');
-    let socket;
-    try {
-      // URL is rebuilt each attempt so refreshed tokens get picked up.
-      socket = new WebSocket(chatSocketUrl({ kind, key }));
-    } catch {
-      setState('error');
-      return;
-    }
-    ws = socket;
-
-    socket.onopen = () => {
-      attempts = 0;
-      refreshTried = false;
-      setState('open');
-    };
-
-    socket.onmessage = (e) => {
-      let data;
-      try { data = JSON.parse(e.data); } catch { return; }
-      // Server-side errors (e.g. empty content) come through the open socket.
-      if (data?.type === 'error') {
-        const detail = data.detail || 'Ошибка';
-        listeners.error.forEach((cb) => { try { cb(detail); } catch {} });
-        return;
-      }
-      listeners.message.forEach((cb) => { try { cb(data); } catch {} });
-    };
-
-    socket.onerror = () => { /* close will follow */ };
-
-    socket.onclose = async (e) => {
-      if (closedByUser) { setState('closed'); return; }
-
-      if (e.code === 4403) {
-        setState('forbidden');
-        return;
-      }
-
-      if (e.code === 4404) {
-        // Username doesn't exist or it's the current user — no point retrying.
-        setState('not_found');
-        return;
-      }
-
-      if (e.code === 4401) {
-        if (refreshTried) {
-          setState('unauthorized');
-          listeners.unauthorized.forEach((cb) => { try { cb(); } catch {} });
-          return;
-        }
-        refreshTried = true;
-        setState('reconnecting');
-        try {
-          await refreshAccess();
-        } catch {
-          setState('unauthorized');
-          listeners.unauthorized.forEach((cb) => { try { cb(); } catch {} });
-          return;
-        }
-        if (closedByUser) return;
-        connect();
-        return;
-      }
-
-      attempts++;
-      const delay = Math.min(1000 * Math.pow(2, attempts - 1), 30000);
-      clearTimeout(reconnectTimer);
-      reconnectTimer = setTimeout(() => { if (!closedByUser) connect(); }, delay);
-      setState('reconnecting');
-    };
-  }
-
-  connect();
-
-  return {
-    send(content) {
-      if (ws?.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ content }));
-        return true;
-      }
-      return false;
-    },
-    close() {
-      closedByUser = true;
-      clearTimeout(reconnectTimer);
-      if (ws && ws.readyState !== WebSocket.CLOSED) ws.close();
-    },
-    get state() { return state; },
-    onMessage(cb)      { listeners.message.add(cb);      return () => listeners.message.delete(cb); },
-    onState(cb)        { listeners.state.add(cb);        return () => listeners.state.delete(cb); },
-    onError(cb)        { listeners.error.add(cb);        return () => listeners.error.delete(cb); },
-    onUnauthorized(cb) { listeners.unauthorized.add(cb); return () => listeners.unauthorized.delete(cb); },
-  };
-}
-
 // ─── Normalizers ───────────────────────────────────────────────────────────
 
-// Backend (room WS):  {type:"message", id, room, sender:{...}, content, created_at}
-// Backend (DM WS):    {type:"dm",      id, sender:{...}, recipient:{...}, content, created_at}
-// Backend (history):  same shape minus `type`.
+// Backend message shape (room.message, dm.message, history rows):
+//   {id, sender:{id,username,first_name,last_name}, content, created_at,
+//    [room? recipient? read_at?], ...}
 export function normalizeMessage(raw, { meId }) {
   const senderId = raw.sender?.id;
   const isMine = meId != null && senderId === meId;
@@ -194,18 +136,21 @@ export function normalizeMessage(raw, { meId }) {
     authorId: isMine ? 'me' : `u${senderId}`,
     authorName: fullName || raw.sender?.username || '',
     authorUsername: raw.sender?.username,
+    recipientId: raw.recipient?.id,
     kind: 'text',
     text: raw.content || '',
     sentAt: new Date(raw.created_at || Date.now()).getTime(),
-    status: isMine ? 'delivered' : undefined,
+    // For my own DMs: read_at !== null means partner has read it → 'read'.
+    // Plain delivered otherwise. Updated live by dm.read events.
+    status: isMine
+      ? (raw.read_at ? 'read' : 'delivered')
+      : undefined,
   };
 }
 
-// Backend response shape per integration spec:
-//   { partner: {id,username,first_name,last_name},
-//     last_message: "string",
-//     last_message_at: "ISO",
-//     unread_count: number }
+// Backend conversation shape:
+//   { partner: {id,username,first_name,last_name}, last_message: "string",
+//     last_message_at: "ISO", unread_count: number }
 export function normalizeConversation(raw) {
   const u = raw.partner || raw.user || raw.peer || {};
   const fn = u.first_name || '';

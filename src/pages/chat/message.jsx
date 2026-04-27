@@ -20,18 +20,13 @@ function Avatar({ name, size = 28 }) {
 }
 
 // ─── Status tick (own messages only) ───────────────────────────────────────
+// Two states: not-read = single ✓, read = double ✓✓ (blue accent).
 function StatusTick({ status }) {
-  if (status === 'sending') {
-    return <ChatIco.clock width={12} height={12} style={{ color: 'rgba(255,255,255,0.7)' }} />;
-  }
   if (status === 'failed') {
     return <ChatIco.alertCircle width={12} height={12} style={{ color: '#fca5a5' }} />;
   }
   if (status === 'read') {
     return <ChatIco.doubleCheck width={14} height={14} style={{ color: '#a5b4fc' }} />;
-  }
-  if (status === 'delivered') {
-    return <ChatIco.doubleCheck width={14} height={14} style={{ color: 'rgba(255,255,255,0.7)' }} />;
   }
   return <ChatIco.check width={14} height={14} style={{ color: 'rgba(255,255,255,0.7)' }} />;
 }

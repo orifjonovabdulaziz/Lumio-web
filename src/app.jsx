@@ -15,6 +15,7 @@ import { RoomEditPage } from './pages/rooms/edit.jsx';
 import { RoomDetailPage } from './pages/rooms/detail.jsx';
 import { RoomLivePage } from './pages/rooms/live.jsx';
 import { ChatPage } from './pages/chat/index.jsx';
+import { chatHub } from './lib/chatHub.js';
 import { EditModeBridge, applyTweakVars } from './tweaks.jsx';
 
 function isProtected(path) {
@@ -82,6 +83,16 @@ function LumioApp() {
   const { user, bootstrapping } = useAuth();
 
   React.useEffect(() => { applyTweakVars(); }, []);
+
+  // Single multiplexed chat WebSocket — open while authed, close on logout.
+  // Depend on the *boolean* (not the user object) so re-renders that mint a
+  // new user reference don't trigger a redundant connect() call.
+  const isAuthed = !!user;
+  React.useEffect(() => {
+    if (bootstrapping) return;
+    if (isAuthed) chatHub.connect();
+    else chatHub.disconnect();
+  }, [isAuthed, bootstrapping]);
 
   // Route guard — protected routes require a user
   React.useEffect(() => {

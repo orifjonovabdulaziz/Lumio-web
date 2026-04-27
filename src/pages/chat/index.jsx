@@ -1,5 +1,6 @@
 // ChatPage — full-page chat (two columns desktop / single column mobile).
-// Connected to backend via REST + WS (see ../../lib/chat.js).
+// Live data flows through the multiplexed chatHub (../../lib/chatHub.js);
+// REST is used only to load history once per chat open + the inbox bootstrap.
 import React from 'react';
 import { useRouter } from '../../router.jsx';
 import { useAuth, logout as doLogout } from '../../lib/auth.js';
@@ -7,7 +8,8 @@ import { LumioLogo, Toast, Button } from '../../ui.jsx';
 import { ChatIco } from './icons.jsx';
 import { ChatList } from './list.jsx';
 import { ChatWindow } from './window.jsx';
-import { useChats, useChatThread } from './hooks.js';
+import { useChats, useChatThread, useOnline, useHubState } from './hooks.js';
+import { chatHub } from '../../lib/chatHub.js';
 import { MOCK_TEMPLATES, consumePendingActive } from './mock.js';
 
 // ─── Error boundary ────────────────────────────────────────────────────────
@@ -79,27 +81,14 @@ function useIsMobile() {
   return m;
 }
 
-function useOnline() {
-  const [online, setOnline] = React.useState(() =>
-    typeof navigator === 'undefined' ? true : navigator.onLine);
-  React.useEffect(() => {
-    const on = () => setOnline(true);
-    const off = () => setOnline(false);
-    window.addEventListener('online', on);
-    window.addEventListener('offline', off);
-    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
-  }, []);
-  return online;
-}
-
 function ChatPageInner() {
   const { user, bootstrapping } = useAuth();
   const { navigate } = useRouter();
   const isMobile = useIsMobile();
   const online = useOnline();
 
-  const { chats, loading: chatsLoading, refresh, setChatField, bumpPreview, upsertChat } =
-    useChats({ enabled: !bootstrapping && !!user });
+  const { chats, loading: chatsLoading, setChatField, upsertChat } =
+    useChats({ enabled: !bootstrapping && !!user, meId: user?.id });
 
   const [activeId, setActiveId] = React.useState(() => consumePendingActive());
   const [query, setQuery] = React.useState('');
@@ -115,62 +104,36 @@ function ChatPageInner() {
 
   const activeChat = chats.find((c) => c.id === activeId) || null;
 
-  // Auth failure on a WS — refresh already failed, so log out and redirect.
-  const handleUnauthorized = React.useCallback(() => {
-    doLogout();
-    navigate('/sign-in', { replace: true });
-  }, [navigate]);
-
-  // {type:"error", detail:"..."} from server (e.g. empty content). Surface as
-  // a toast — sock stays open per spec, no further action needed.
-  const handleWsError = React.useCallback((detail) => {
-    setToast({ kind: 'error', text: detail });
-  }, []);
-
   const { messages, loading: threadLoading, error: threadError,
     wsState, isConnected, pendingSends, send } =
     useChatThread({
       chat: activeChat,
       meId: user?.id,
       online,
-      onUnauthorized: handleUnauthorized,
-      onWsError: handleWsError,
+      onSendError: (detail) => setToast({ kind: 'error', text: detail }),
     });
 
-  // Stable id deps — `activeChat` is re-derived via `chats.find(...)` on
-  // every render, so its identity changes after each `chats` refresh. Using
-  // the object as a dep would loop with bumpPreview / setChatField below.
+  // Hub-level auth failure: refreshAccess already failed inside the hub →
+  // we're truly logged out. Bounce to sign-in.
+  React.useEffect(() => {
+    const off = chatHub.on('unauthorized', () => {
+      doLogout();
+      navigate('/sign-in', { replace: true });
+    });
+    return off;
+  }, [navigate]);
+
+  // Stable string id — using activeChat itself as a dep would loop because
+  // `chats.find(...)` returns a new ref on every chats update.
   const activeChatId = activeChat?.id;
 
-  // Once history is fetched, the backend marks unread as read — mirror locally.
-  // Run only when the chat changes, not on every chat-list refresh.
+  // Clear unread when chat opens AND on every new message in the active chat
+  // (the global dm.message handler in useChats bumps unread; this counters it
+  // for the chat the user is currently reading).
   React.useEffect(() => {
     if (!activeChatId) return;
     setChatField(activeChatId, { unread: 0 });
-  }, [activeChatId, setChatField]);
-
-  // Bump preview text/time of the active chat from the latest message.
-  React.useEffect(() => {
-    if (!activeChatId || messages.length === 0) return;
-    const last = messages[messages.length - 1];
-    if (!last) return;
-    bumpPreview(activeChatId, {
-      text: last.text || '',
-      time: last.sentAt,
-      self: last.authorId === 'me',
-    });
-  }, [messages, activeChatId, bumpPreview]);
-
-  // After a fresh DM message, refresh the inbox so other conversations'
-  // unread counts stay roughly current. Throttled to once per second.
-  const lastRefreshRef = React.useRef(0);
-  React.useEffect(() => {
-    if (!messages.length) return;
-    const now = Date.now();
-    if (now - lastRefreshRef.current < 1000) return;
-    lastRefreshRef.current = now;
-    refresh({ silent: true });
-  }, [messages.length, refresh]);
+  }, [activeChatId, messages.length, setChatField]);
 
   if (!user) return null;
 
@@ -234,16 +197,10 @@ function ChatPageInner() {
           Переподключаемся…
         </Banner>
       )}
-      {wsState === 'forbidden' && (
+      {threadError?.kind === 'forbidden' && (
         <Banner color="danger">
           <ChatIco.alertCircle width={14} height={14} />
-          Нет доступа к этому чату.
-        </Banner>
-      )}
-      {wsState === 'not_found' && (
-        <Banner color="danger">
-          <ChatIco.alertCircle width={14} height={14} />
-          Пользователь не найден или это вы.
+          {threadError.message || 'Нет доступа к этому чату.'}
         </Banner>
       )}
 

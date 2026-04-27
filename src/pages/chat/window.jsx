@@ -244,7 +244,7 @@ function DisabledIconBtn({ label, icon: Ico }) {
 }
 
 // ─── Thread grouping ───────────────────────────────────────────────────────
-function groupMessages(messages) {
+export function groupMessages(messages) {
   const out = [];
   let lastDateKey = '';
   const list = messages.slice().sort((a, b) => a.sentAt - b.sentAt);
