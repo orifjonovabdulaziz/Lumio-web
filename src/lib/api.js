@@ -1,8 +1,9 @@
 import axios from 'axios';
 import { tokenStorage } from './storage.js';
+import { API_BASE } from '../config/api.js';
 
-export const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
+// Re-export for back-compat — existing imports of `API_BASE_URL` still work.
+export const API_BASE_URL = API_BASE;
 
 const PUBLIC_PATHS = [
   '/auth/register/',
@@ -16,7 +17,7 @@ function isPublic(url = '') {
 }
 
 export const api = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: API_BASE,
   headers: {
     'Content-Type': 'application/json',
     Accept: 'application/json',
@@ -49,7 +50,7 @@ export async function refreshAccess() {
   if (!refreshPromise) {
     refreshPromise = axios
       .post(
-        `${API_BASE_URL}/auth/token/refresh/`,
+        `${API_BASE}/auth/token/refresh/`,
         { refresh },
         { headers: { 'Content-Type': 'application/json', Accept: 'application/json' } },
       )

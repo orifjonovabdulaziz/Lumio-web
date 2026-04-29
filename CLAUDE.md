@@ -41,7 +41,7 @@ The backend must include the dev origin (`http://localhost:5173`) in `CORS_ALLOW
 
 ### Route guard
 
-`PROTECTED` set lives in [src/app.jsx](src/app.jsx). When adding a protected route, add it there — the page component is rendered via `user ? <Page /> : null` and the redirect effect is centralized. Do not replicate the redirect inside each page.
+`isProtected(path)` lives in [src/app.jsx](src/app.jsx). When adding a protected route, extend that function — page components render via `user ? <Page /> : null` and the redirect effect is centralized in `LumioApp`. Do not replicate the redirect inside each page.
 
 ### Styling — inline styles + CSS custom properties
 
@@ -58,6 +58,29 @@ Django + SimpleJWT at `VITE_API_BASE_URL`. Relevant endpoints: `POST /auth/regis
 400 responses from `/auth/register/` return per-field arrays (`{"email": ["..."]}`) — [src/pages/signup.jsx](src/pages/signup.jsx) maps those onto form field errors; `detail` / `non_field_errors` go to a global banner.
 
 `user.role` is `"teacher" | "student"` and switches the teacher-only / student-only tile sets in [src/pages/appshell.jsx](src/pages/appshell.jsx).
+
+### Chat module — multiplexed WebSocket + REST history
+
+The chat lives at [src/pages/chat/](src/pages/chat/) (popover quick-reply + full page) on top of two libraries:
+
+- [src/lib/chatHub.js](src/lib/chatHub.js) — singleton client for the **single multiplexed WebSocket** at `${API_BASE without /api/v1, http→ws}/ws/chat/?token=<jwt>`. RPC actions (`subscribe.room`, `send.dm`, `mark_read.room`, …) are matched to acks by request id; push events (`room.message`, `dm.message`, `dm.read`, `room.read`) fan out via `chatHub.on(event, fn)`. Connect/disconnect are tied to auth bootstrap in [src/app.jsx](src/app.jsx). On a `4401` close the hub tries `refreshAccess()` once before emitting `unauthorized`. Reconnect is exponential (1s/2s/4s/8s/16s/30s) and `chatHub.rooms` (a Set) is auto-resubscribed on every reopen.
+- [src/lib/chat.js](src/lib/chat.js) — REST helpers + payload normalizers. The history endpoints are paginated ASC oldest-first, so:
+  - `listLatestMessages({ kind, key })` — initial history. Fetches `?page=1` to learn `count`, then the last page (and the previous one if the last is partial). Up to 3 GETs per chat open.
+  - `listMessagesAfter({ kind, key, afterId })` — reconnect catchup; walks `next` until exhausted.
+  - `fetchLastMessage({ kind, key })` — single most-recent message, used to backfill room previews because `/rooms/` listing does not include `last_message`.
+
+Three load-bearing rules — violating any of them breaks the chat in subtle ways:
+
+1. **One WebSocket per session.** Open on login, close on logout. `chatHub.connect()` is idempotent and `_open()` defensively closes any prior socket. The app-level effect depends on the `!!user` *boolean*, not the user object, so renders that mint a new user reference don't reconnect.
+2. **No REST polling.** `/dm/conversations/`, `/rooms/`, `/rooms/unread/`, and `/messages/` are called once per relevant screen open; live updates arrive over WS only. Do not add `setInterval` or visibility/online listeners that re-fetch.
+3. **Merge messages by `serverId`, never replace.** `setMessages` uses the functional updater that dedupes by id. Replacing with REST results would clobber WS messages that arrived during the request — including the user's own sends, since the server echoes every send back as a WS event.
+
+Hook responsibilities ([src/pages/chat/hooks.js](src/pages/chat/hooks.js)):
+
+- `useChats({ enabled, meId, prefetchPreviews })` — inbox state. Loads REST once, **eager-subscribes to all known rooms** (so `room.message` events update preview/unread for rooms the user hasn't opened), and optionally backfills room previews via `fetchLastMessage`. Pass `prefetchPreviews: false` for callers that only need unread counters (e.g. the dashboard badge in [src/pages/dashboard/teacher.jsx](src/pages/dashboard/teacher.jsx)) so the per-room GETs are skipped.
+- `useChatThread({ chat, meId, online, onSendError })` — per-chat history + live updates. **Does not** subscribe/unsubscribe rooms — that ownership lives in `useChats`, so subscriptions persist after the thread closes and the inbox keeps updating. DMs need no subscription; backend auto-attaches the `user.<id>` group on connect. Handles read-receipts: own DM messages flip `delivered → read` on `dm.read`, own room messages flip on the `room.read` watermark. For rooms, a debounced `mark_read.room` advances the read watermark whenever new messages are ingested.
+
+There is no optimistic UI for sends. A `pendingSends` counter shows a spinner while at least one send is awaiting its echo; the message itself appears only when the WS event arrives. Read-receipt UI is two-state: one tick = unread, two ticks (blue) = read. See [src/pages/chat/message.jsx](src/pages/chat/message.jsx) `StatusTick`.
 
 ### Quirks
 

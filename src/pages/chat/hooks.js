@@ -72,7 +72,13 @@ export function useUserSearch(query, { minLength = 2 } = {}) {
 }
 
 // ─── Inbox: conversations + rooms list, kept live by dm.message events ───
-export function useChats({ enabled, meId }) {
+//
+// `prefetchPreviews` controls whether we fetch each room's last message in
+// the background to fill in `preview`/`previewTime` (see useEffect below).
+// Inbox UIs (popover, chat page) want it true. Surface-level consumers
+// that only need unread counts (e.g. dashboard badge) pass false to skip
+// the per-room GETs.
+export function useChats({ enabled, meId, prefetchPreviews = true }) {
   const [chats, setChats] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState(null);
@@ -137,6 +143,7 @@ export function useChats({ enabled, meId }) {
       if (!chatHub.rooms.has(c.backendKey)) {
         chatHub.subscribeRoom(c.backendKey).catch(() => {});
       }
+      if (!prefetchPreviews) continue;                         // caller doesn't need previews
       if (c.previewTime > 0) continue;                         // backend or WS already filled it
       if (previewFetched.current.has(c.backendKey)) continue;  // attempted this session
       previewFetched.current.add(c.backendKey);
@@ -161,7 +168,7 @@ export function useChats({ enabled, meId }) {
         .catch(() => {});
     }
     return () => ctrl.abort();
-  }, [chats, enabled, meId]);
+  }, [chats, enabled, meId, prefetchPreviews]);
 
   // ── Live DM updates ──────────────────────────────────────────────────────
   // dm.message: bump preview, increment unread (unless mine).

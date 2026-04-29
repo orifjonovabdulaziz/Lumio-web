@@ -89,9 +89,13 @@ export function ChatTrigger({ unread: unreadProp }) {
       />
       {open && (
         <div style={{
-          position: 'absolute', top: 'calc(100% + 8px)', right: 0,
+          // Anchor to the viewport, not the trigger wrapper — the trigger sits
+          // ~140px from the right edge (notifications + avatar follow it), so
+          // `right: 0` would cut the popover off the left side on screens
+          // narrower than ~540px. Topbars are 68px tall in both dashboards.
+          position: 'fixed', top: 76, right: 12,
           width: 400, maxWidth: 'calc(100vw - 24px)',
-          height: 540, maxHeight: 'calc(100vh - 100px)',
+          height: 540, maxHeight: 'calc(100vh - 88px)',
           background: 'white', border: '1px solid var(--line-strong)',
           borderRadius: 14, overflow: 'hidden',
           boxShadow: '0 12px 32px -8px rgba(15,23,42,0.18), 0 2px 6px rgba(15,23,42,0.06)',

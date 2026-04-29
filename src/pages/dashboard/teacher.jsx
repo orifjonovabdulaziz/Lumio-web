@@ -4,6 +4,7 @@ import { LumioLogo, Button } from '../../ui.jsx';
 import { useRouter } from '../../router.jsx';
 import { useAuth, logout as doLogout } from '../../lib/auth.js';
 import { ChatTrigger } from '../chat/popover.jsx';
+import { useChats } from '../chat/hooks.js';
 
 // ─── Icon set (lucide-style, inline SVG) ───────────────────────────────────
 const iconProps = {
@@ -77,7 +78,8 @@ const mockStats = {
   lessons: 18, newStudents: 2, income: 45000, attendance: 94,
 };
 
-const mockUnread = { chats: 3, notifications: 5 };
+// Notifications aren't backed by an API yet — left as a placeholder count.
+const mockNotifications = 5;
 
 // ─── Component ─────────────────────────────────────────────────────────────
 export function TeacherDashboard() {
@@ -99,6 +101,20 @@ export function TeacherDashboard() {
     if (menuOpen) document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
   }, [menuOpen]);
+
+  // Real unread for the chat icon — backed by /dm/conversations/ +
+  // /rooms/unread/ once on mount, kept live via the chatHub WS handlers
+  // inside useChats. prefetchPreviews=false because the dashboard never
+  // shows previews; we only need counters.
+  const { chats } = useChats({
+    enabled: !!user,
+    meId: user?.id,
+    prefetchPreviews: false,
+  });
+  const unreadChats = React.useMemo(
+    () => chats.reduce((sum, c) => sum + (c.unread || 0), 0),
+    [chats],
+  );
 
   if (!user) return null;
 
@@ -126,7 +142,7 @@ export function TeacherDashboard() {
       }}>
         <TopBar
           user={user}
-          unread={mockUnread}
+          unread={{ chats: unreadChats, notifications: mockNotifications }}
           menuOpen={menuOpen}
           setMenuOpen={setMenuOpen}
           menuRef={menuRef}
@@ -192,7 +208,7 @@ function Sidebar({ collapsed, onToggle, onNavRooms, width }) {
       )}
 
       <nav style={{
-        flex: 1, padding: collapsed ? '12px 8px' : '12px 12px',
+        flex: 1, minHeight: 0, padding: collapsed ? '12px 8px' : '12px 12px',
         display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto',
       }}>
         {mainItems.map((it) => <NavItem key={it.key} item={it} collapsed={collapsed} />)}

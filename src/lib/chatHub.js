@@ -7,17 +7,13 @@
 // Rooms must be subscribed via subscribe.room before their messages start.
 //
 // Lifecycle: caller wires connect()/disconnect() to auth bootstrap (see app.jsx).
-import { API_BASE_URL, refreshAccess } from './api.js';
+import { refreshAccess } from './api.js';
+import { WS_BASE } from '../config/api.js';
 import { tokenStorage } from './storage.js';
-
-function wsBase() {
-  const httpBase = API_BASE_URL.replace(/\/api\/v1\/?$/, '');
-  return httpBase.replace(/^http/i, 'ws');
-}
 
 function buildUrl() {
   const token = tokenStorage.getAccess();
-  return `${wsBase()}/ws/chat/?token=${encodeURIComponent(token || '')}`;
+  return `${WS_BASE}/ws/chat/?token=${encodeURIComponent(token || '')}`;
 }
 
 let idCounter = 0;

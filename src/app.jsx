@@ -7,8 +7,8 @@ import { LandingPage } from './pages/landing.jsx';
 import { SignInPage } from './pages/signin.jsx';
 import { SignUpPage } from './pages/signup.jsx';
 import { ForgotPage } from './pages/forgot.jsx';
-import { AppShell } from './pages/appshell.jsx';
 import { TeacherDashboard } from './pages/dashboard/teacher.jsx';
+import { StudentDashboard } from './pages/dashboard/student.jsx';
 import { RoomsListPage } from './pages/rooms/list.jsx';
 import { RoomNewPage } from './pages/rooms/new.jsx';
 import { RoomEditPage } from './pages/rooms/edit.jsx';
@@ -17,6 +17,7 @@ import { RoomLivePage } from './pages/rooms/live.jsx';
 import { ChatPage } from './pages/chat/index.jsx';
 import { chatHub } from './lib/chatHub.js';
 import { EditModeBridge, applyTweakVars } from './tweaks.jsx';
+import { EnvSwitcher } from './components/EnvSwitcher.jsx';
 
 function isProtected(path) {
   return path === '/app' || path === '/chat' || path === '/rooms' || path.startsWith('/rooms/');
@@ -50,7 +51,7 @@ function renderRoute(route, user) {
     case 'forgot':       return <ForgotPage />;
     case 'app':
       if (!user) return null;
-      return user.role === 'teacher' ? <TeacherDashboard /> : <AppShell />;
+      return user.role === 'teacher' ? <TeacherDashboard /> : <StudentDashboard />;
     case 'chat':         return user ? <ChatPage /> : null;
     case 'rooms-list':   return user ? <RoomsListPage /> : null;
     case 'rooms-new':    return user ? <RoomNewPage /> : null;
@@ -113,6 +114,7 @@ function LumioApp() {
         {page}
       </PageTransition>
       <EditModeBridge />
+      <EnvSwitcher />
     </div>
   );
 }
